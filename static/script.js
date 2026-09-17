@@ -37,11 +37,7 @@ const inputCnpj = document.getElementById("cnpj");
 const form = document.getElementById("form-busca");
 const erroCnpj = document.getElementById("erro-cnpj");
 const status = document.getElementById("status");
-const divResultados = document.getElementById("resultados");
-const linhaCabecalho = document.getElementById("linha-cabecalho");
-const corpoTabela = document.getElementById("corpo-tabela");
-const avisoManual = document.getElementById("aviso-manual");
-const linkManual = document.getElementById("link-manual");
+const resultadosFontes = document.getElementById("resultados-fontes");
 const botaoBuscar = document.getElementById("botao-buscar");
 
 inputCnpj.addEventListener("input", () => {
@@ -54,25 +50,29 @@ function mostrarStatus(mensagem, tipo) {
   status.hidden = !mensagem;
 }
 
-function renderizarResultados(cabecalhos, resultados) {
-  linhaCabecalho.innerHTML = "";
+function criarTabelaResultados(fonte) {
+  const tabela = document.createElement("table");
+  const thead = document.createElement("thead");
+  const linhaCabecalho = document.createElement("tr");
+
   const titulos =
-    cabecalhos && cabecalhos.length
-      ? cabecalhos
-      : resultados[0].colunas.map((_, indice) => `Coluna ${indice + 1}`);
+    fonte.cabecalhos && fonte.cabecalhos.length
+      ? fonte.cabecalhos
+      : fonte.resultados[0].colunas.map((_, indice) => `Coluna ${indice + 1}`);
 
   titulos.forEach((titulo) => {
     const th = document.createElement("th");
     th.textContent = titulo;
     linhaCabecalho.appendChild(th);
   });
-
   const thAcao = document.createElement("th");
   thAcao.textContent = "Documento";
   linhaCabecalho.appendChild(thAcao);
+  thead.appendChild(linhaCabecalho);
+  tabela.appendChild(thead);
 
-  corpoTabela.innerHTML = "";
-  resultados.forEach((resultado) => {
+  const corpoTabela = document.createElement("tbody");
+  fonte.resultados.forEach((resultado) => {
     const tr = document.createElement("tr");
 
     resultado.colunas.forEach((coluna) => {
@@ -97,15 +97,56 @@ function renderizarResultados(cabecalhos, resultados) {
 
     corpoTabela.appendChild(tr);
   });
+  tabela.appendChild(corpoTabela);
 
-  divResultados.hidden = false;
+  return tabela;
+}
+
+function renderizarFonte(fonte) {
+  const secao = document.createElement("section");
+  secao.className = "fonte";
+
+  const titulo = document.createElement("h2");
+  titulo.textContent = fonte.nome;
+  secao.appendChild(titulo);
+
+  if (!fonte.ok) {
+    const mensagem = document.createElement("p");
+    mensagem.className = "status erro";
+    mensagem.textContent = fonte.erro || "Não foi possível concluir a busca nesta fonte.";
+    secao.appendChild(mensagem);
+  } else if (!fonte.resultados.length) {
+    const mensagem = document.createElement("p");
+    mensagem.className = "status vazio";
+    mensagem.textContent = fonte.aviso || "Nenhum resultado encontrado para este CNPJ.";
+    secao.appendChild(mensagem);
+  } else {
+    const mensagem = document.createElement("p");
+    mensagem.className = "status sucesso";
+    mensagem.textContent = `${fonte.resultados.length} resultado(s) encontrado(s).`;
+    secao.appendChild(mensagem);
+    secao.appendChild(criarTabelaResultados(fonte));
+  }
+
+  if ((!fonte.ok || !fonte.resultados.length) && fonte.url_manual) {
+    const aviso = document.createElement("p");
+    aviso.className = "aviso-manual-fonte";
+    const link = document.createElement("a");
+    link.href = fonte.url_manual;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = `Abrir busca manual em ${fonte.nome}`;
+    aviso.appendChild(link);
+    secao.appendChild(aviso);
+  }
+
+  return secao;
 }
 
 form.addEventListener("submit", async (evento) => {
   evento.preventDefault();
 
-  divResultados.hidden = true;
-  avisoManual.hidden = true;
+  resultadosFontes.innerHTML = "";
   erroCnpj.hidden = true;
   mostrarStatus("", "");
 
@@ -117,7 +158,7 @@ form.addEventListener("submit", async (evento) => {
   }
 
   botaoBuscar.disabled = true;
-  mostrarStatus("Buscando no Sistema Mediador...", "carregando");
+  mostrarStatus("Buscando nas fontes disponíveis...", "carregando");
 
   try {
     const resposta = await fetch("/buscar", {
@@ -129,20 +170,13 @@ form.addEventListener("submit", async (evento) => {
 
     if (!dados.ok) {
       mostrarStatus(dados.erro || "Não foi possível concluir a busca.", "erro");
-      if (dados.url_manual) {
-        linkManual.href = dados.url_manual;
-        avisoManual.hidden = false;
-      }
       return;
     }
 
-    if (!dados.resultados.length) {
-      mostrarStatus(dados.aviso || "Nenhum resultado encontrado para este CNPJ.", "vazio");
-      return;
-    }
-
-    mostrarStatus(`${dados.resultados.length} resultado(s) encontrado(s).`, "sucesso");
-    renderizarResultados(dados.cabecalhos, dados.resultados);
+    mostrarStatus("", "");
+    dados.fontes.forEach((fonte) => {
+      resultadosFontes.appendChild(renderizarFonte(fonte));
+    });
   } catch (erro) {
     mostrarStatus("Erro de conexão com o servidor local. Tente novamente.", "erro");
   } finally {

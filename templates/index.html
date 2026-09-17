@@ -12,7 +12,7 @@
       <h1>Buscador de Convenção Coletiva</h1>
       <p class="subtitulo">
         Consulta pública ao Sistema Mediador (Ministério do Trabalho e Emprego)
-        pelo CNPJ do sindicato.
+        e ao SACC-DIEESE pelo CNPJ do sindicato.
       </p>
     </header>
 
@@ -36,24 +36,53 @@
 
     <div id="status" class="status" hidden></div>
 
-    <div id="resultados" class="resultados" hidden>
-      <table id="tabela-resultados">
-        <thead><tr id="linha-cabecalho"></tr></thead>
-        <tbody id="corpo-tabela"></tbody>
-      </table>
-    </div>
+    <div id="resultados-fontes"></div>
 
-    <div id="aviso-manual" class="aviso-manual" hidden>
-      <p>Não foi possível concluir a busca automaticamente pelo aplicativo.</p>
-      <a id="link-manual" href="#" target="_blank" rel="noopener">
-        Abrir busca manual no site oficial do Mediador
-      </a>
-    </div>
+    <details class="outras-fontes">
+      <summary>Outras fontes de consulta (não automatizadas pelo app)</summary>
+      <div class="outras-fontes-conteudo">
+        <p>
+          O app já consulta automaticamente o <strong>Sistema Mediador</strong> e o
+          <strong>SACC-DIEESE</strong> acima. As fontes abaixo não têm busca por
+          CNPJ integrada — por serem sites de cada sindicato/federação (sem
+          padrão único de busca) ou serviços pagos por assinatura, cujos termos
+          de uso não permitem automação. Ficam aqui como atalhos para consulta manual.
+        </p>
+        <ul>
+          <li>
+            <a href="https://mediador.trabalho.gov.br/sistemas/mediador/ConsultarInstColetivo/ConsultaBasica" target="_blank" rel="noopener">
+              Sistema Mediador — busca manual
+            </a>
+          </li>
+          <li>
+            <a href="https://www.dieese.org.br/sacc/pesquisa.do?method=setup" target="_blank" rel="noopener">
+              SACC-DIEESE — busca manual
+            </a>
+          </li>
+          <li>
+            <a href="https://www.fiesp.com.br" target="_blank" rel="noopener">FIESP/CIESP</a>
+            e
+            <a href="https://www.fecomercio.com.br" target="_blank" rel="noopener">Fecomércio</a>
+            — convenções das categorias filiadas a cada federação.
+          </li>
+          <li>
+            Bases pagas com CCTs e acordos (ex.: LegisWeb, Convenia, IOB) —
+            úteis se sua empresa já tiver assinatura; não são consultadas por
+            aqui.
+          </li>
+          <li>
+            Em último caso, o sindicato profissional ou patronal da categoria
+            é sempre a fonte definitiva do instrumento vigente.
+          </li>
+        </ul>
+      </div>
+    </details>
 
     <footer>
       <p>
-        Fonte dos dados: Sistema Mediador — mediador.trabalho.gov.br.
-        Ferramenta não oficial, criada apenas para facilitar a consulta pública.
+        Fontes dos dados: Sistema Mediador (mediador.trabalho.gov.br) e
+        SACC-DIEESE (dieese.org.br). Ferramenta não oficial, criada apenas
+        para facilitar a consulta pública.
       </p>
     </footer>
   </div>

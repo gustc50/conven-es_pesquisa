@@ -1,8 +1,8 @@
 """Buscador de Convenção Coletiva — aplicação web local (Flask).
 
 Interface para consultar, pelo CNPJ do sindicato, instrumentos coletivos
-registrados no Sistema Mediador (Ministério do Trabalho e Emprego) e
-baixar o PDF correspondente.
+em múltiplas fontes públicas (Sistema Mediador, SACC-DIEESE) e baixar o
+PDF correspondente.
 """
 import re
 import threading
@@ -12,17 +12,12 @@ from urllib.parse import urlparse
 
 from flask import Flask, Response, jsonify, redirect, render_template, request
 
-from mediador import (
-    MediadorError,
-    URL_BUSCA_MANUAL,
-    buscar_por_cnpj,
-    cnpj_valido,
-    resolver_arquivo_original,
-)
+import fontes
+from fontes.comum import FonteError, cnpj_valido, resolver_arquivo_original
 
 app = Flask(__name__)
 
-HOSTS_PERMITIDOS_DOWNLOAD = ("trabalho.gov.br",)
+HOSTS_PERMITIDOS_DOWNLOAD = ("trabalho.gov.br", "dieese.org.br")
 
 
 def _host_permitido(host):
@@ -42,26 +37,26 @@ def buscar():
     if not cnpj_valido(cnpj):
         return jsonify(ok=False, erro="CNPJ inválido. Confira o número informado."), 400
 
-    try:
-        cabecalhos, resultados, url_consulta = buscar_por_cnpj(cnpj)
-    except MediadorError as exc:
-        return jsonify(ok=False, erro=str(exc), url_manual=URL_BUSCA_MANUAL), 502
+    resultado_fontes = []
+    for modulo in fontes.FONTES:
+        item = {"nome": modulo.NOME_FONTE, "url_manual": modulo.URL_BUSCA_MANUAL}
+        try:
+            cabecalhos, resultados, url_consulta = modulo.buscar_por_cnpj(cnpj)
+            item["ok"] = True
+            item["cabecalhos"] = cabecalhos
+            item["resultados"] = resultados
+            item["url_consulta"] = url_consulta
+            if not resultados:
+                item["aviso"] = (
+                    "Nenhuma convenção, acordo ou termo aditivo foi encontrado "
+                    "para este CNPJ."
+                )
+        except FonteError as exc:
+            item["ok"] = False
+            item["erro"] = str(exc)
+        resultado_fontes.append(item)
 
-    if not resultados:
-        return jsonify(
-            ok=True,
-            cabecalhos=cabecalhos,
-            resultados=[],
-            aviso="Nenhuma convenção, acordo ou termo aditivo foi encontrado para este CNPJ.",
-            url_manual=URL_BUSCA_MANUAL,
-        )
-
-    return jsonify(
-        ok=True,
-        cabecalhos=cabecalhos,
-        resultados=resultados,
-        url_consulta=url_consulta,
-    )
+    return jsonify(ok=True, fontes=resultado_fontes)
 
 
 @app.route("/download")

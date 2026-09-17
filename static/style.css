@@ -129,11 +129,33 @@ h1 {
   color: #8a6d00;
 }
 
-.resultados {
+.fonte {
   background: var(--cor-cartao);
   border: 1px solid var(--cor-borda);
   border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
   overflow-x: auto;
+}
+
+.fonte h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  color: var(--cor-primaria-escura);
+}
+
+.fonte .status {
+  margin-bottom: 14px;
+}
+
+.aviso-manual-fonte {
+  margin-top: 14px;
+  font-size: 0.9rem;
+}
+
+.aviso-manual-fonte a {
+  color: var(--cor-primaria);
+  font-weight: 600;
 }
 
 table {
@@ -181,6 +203,38 @@ thead th {
 .aviso-manual a {
   color: var(--cor-primaria);
   font-weight: 600;
+}
+
+.outras-fontes {
+  background: var(--cor-cartao);
+  border: 1px solid var(--cor-borda);
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+}
+
+.outras-fontes summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--cor-primaria-escura);
+}
+
+.outras-fontes-conteudo {
+  margin-top: 12px;
+  font-size: 0.9rem;
+  color: var(--cor-texto-suave);
+}
+
+.outras-fontes-conteudo a {
+  color: var(--cor-primaria);
+}
+
+.outras-fontes-conteudo ul {
+  padding-left: 20px;
+}
+
+.outras-fontes-conteudo li {
+  margin-bottom: 8px;
 }
 
 footer {
