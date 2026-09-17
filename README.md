@@ -19,7 +19,8 @@ pessoa já pode fazer diretamente no site do Mediador.
    dependências automaticamente (pode levar cerca de um minuto).
 4. O navegador abrirá sozinho em `http://127.0.0.1:5000`.
 5. Digite o CNPJ do sindicato e clique em **Buscar**. Nos resultados, use o
-   botão **Baixar PDF** para salvar a convenção.
+   botão **Baixar / abrir** para salvar o PDF (quando o site disponibiliza o
+   arquivo direto) ou visualizar a página oficial da convenção.
 6. Para encerrar, feche a janela preta que ficou aberta (o servidor local).
 
 ## Estrutura do projeto
@@ -39,4 +40,8 @@ pessoa já pode fazer diretamente no site do Mediador.
   layout. Ainda assim, se o site oficial mudar significativamente ou exigir
   verificação adicional (captcha), a busca automática pode falhar — nesse
   caso é exibido um link para a busca manual no site oficial.
+- Se a busca não trouxer o resultado esperado, o aplicativo salva a última
+  resposta recebida do site oficial em `debug_ultima_consulta.html`, na
+  pasta do programa. Esse arquivo ajuda a entender o que o site retornou
+  (ex.: se o layout mudou) e pode ser compartilhado para diagnóstico.
 - Roda apenas em `127.0.0.1` (acesso local à sua máquina).

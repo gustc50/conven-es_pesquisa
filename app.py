@@ -10,15 +10,14 @@ import time
 import webbrowser
 from urllib.parse import urlparse
 
-import requests
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, redirect, render_template, request
 
 from mediador import (
     MediadorError,
     URL_BUSCA_MANUAL,
-    USER_AGENT,
     buscar_por_cnpj,
     cnpj_valido,
+    resolver_arquivo_original,
 )
 
 app = Flask(__name__)
@@ -73,20 +72,21 @@ def download():
     if not url.startswith("https://") or not _host_permitido(host):
         return "Download não permitido para esta URL.", 400
 
-    try:
-        resposta = requests.get(url, timeout=30, headers={"User-Agent": USER_AGENT})
-        resposta.raise_for_status()
-    except requests.RequestException:
-        return "Não foi possível baixar o arquivo no site oficial.", 502
+    url_final, conteudo, content_type = resolver_arquivo_original(url)
 
-    nome_arquivo = url.rstrip("/").split("/")[-1] or "convencao.pdf"
+    if conteudo is None:
+        # Não foi possível localizar o PDF diretamente: manda o usuário para
+        # a página oficial do instrumento, onde ele pode visualizar/baixar.
+        return redirect(url, code=302)
+
+    nome_arquivo = url_final.rstrip("/").split("/")[-1] or "convencao.pdf"
     nome_arquivo = re.sub(r"[^A-Za-z0-9._-]", "_", nome_arquivo)
     if not nome_arquivo.lower().endswith(".pdf"):
         nome_arquivo += ".pdf"
 
     return Response(
-        resposta.content,
-        mimetype=resposta.headers.get("Content-Type", "application/pdf"),
+        conteudo,
+        mimetype=content_type or "application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
     )
 

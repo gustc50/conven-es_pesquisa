@@ -68,7 +68,7 @@ function renderizarResultados(cabecalhos, resultados) {
   });
 
   const thAcao = document.createElement("th");
-  thAcao.textContent = "Convenção";
+  thAcao.textContent = "Documento";
   linhaCabecalho.appendChild(thAcao);
 
   corpoTabela.innerHTML = "";
@@ -82,11 +82,13 @@ function renderizarResultados(cabecalhos, resultados) {
     });
 
     const tdAcao = document.createElement("td");
-    if (resultado.pdf_url) {
+    if (resultado.detalhe_url) {
       const link = document.createElement("a");
-      link.href = `/download?url=${encodeURIComponent(resultado.pdf_url)}`;
-      link.textContent = "Baixar PDF";
+      link.href = `/download?url=${encodeURIComponent(resultado.detalhe_url)}`;
+      link.textContent = "Baixar / abrir";
       link.className = "botao-download";
+      link.target = "_blank";
+      link.rel = "noopener";
       tdAcao.appendChild(link);
     } else {
       tdAcao.textContent = "—";

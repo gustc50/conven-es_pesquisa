@@ -5,6 +5,7 @@ CNPJ do sindicato, descobrindo os campos do formulário oficial em tempo de
 execução (em vez de fixar nomes de campos), já que o layout do site público
 pode mudar.
 """
+import os
 import re
 from urllib.parse import urljoin
 
@@ -12,7 +13,9 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE_URL = "https://mediador.trabalho.gov.br"
-CAMINHO_BUSCA = "/sistemas/mediador/ConsultarInstColetivo"
+# A página inicial de "ConsultarInstColetivo" é só uma landing page; o
+# formulário de filtros (CNPJ, tipo, vigência, UF) fica em "ConsultaBasica".
+CAMINHO_BUSCA = "/sistemas/mediador/ConsultarInstColetivo/ConsultaBasica"
 URL_BUSCA_MANUAL = BASE_URL + CAMINHO_BUSCA
 
 USER_AGENT = (
@@ -21,7 +24,17 @@ USER_AGENT = (
 )
 
 PALAVRAS_CHAVE_CAMPO_CNPJ = ["cnpj", "participante", "documento", "razaosocial"]
-PALAVRAS_CHAVE_LINK_PDF = ["pdf", "visualiz", "download", "baixar"]
+PALAVRAS_CHAVE_LINK_DETALHE = ["visualiz", "detalh", "extrato", "consultar"]
+PALAVRAS_CHAVE_ARQUIVO_ORIGINAL = ["pdf", "download", "baixar", "original", "imprimir"]
+FRASES_SEM_RESULTADO = [
+    "nenhum resultado",
+    "nenhum registro",
+    "nao foram encontrados",
+    "não foram encontrados",
+    "nenhuma informa",
+]
+
+ARQUIVO_DEBUG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug_ultima_consulta.html")
 
 
 class MediadorError(Exception):
@@ -89,6 +102,22 @@ def _localizar_campo_por_palavras(form, palavras_chave):
     return None
 
 
+def _selecionar_formulario_busca(soup):
+    formularios = soup.find_all("form")
+    for form in formularios:
+        if _localizar_campo_por_palavras(form, PALAVRAS_CHAVE_CAMPO_CNPJ) is not None:
+            return form
+    return formularios[0] if formularios else None
+
+
+def _salvar_debug(texto):
+    try:
+        with open(ARQUIVO_DEBUG, "w", encoding="utf-8") as arquivo:
+            arquivo.write(texto)
+    except OSError:
+        pass
+
+
 def _montar_dados_formulario(form, cnpj):
     dados = {}
     for campo in form.find_all(["input", "select", "textarea"]):
@@ -150,23 +179,74 @@ def _extrair_resultados(tabela, url_base):
             continue
         textos = [c.get_text(" ", strip=True) for c in celulas]
 
-        link_pdf = None
+        link_detalhe = None
         for link in linha.find_all("a", href=True):
             texto_link = link.get_text(" ", strip=True).lower()
             href = link["href"]
             if href.lower().endswith(".pdf") or any(
-                p in texto_link for p in PALAVRAS_CHAVE_LINK_PDF
+                p in texto_link for p in PALAVRAS_CHAVE_LINK_DETALHE
             ):
-                link_pdf = urljoin(url_base, href)
+                link_detalhe = urljoin(url_base, href)
                 break
-        if link_pdf is None:
+        if link_detalhe is None:
             primeiro_link = linha.find("a", href=True)
             if primeiro_link is not None:
-                link_pdf = urljoin(url_base, primeiro_link["href"])
+                link_detalhe = urljoin(url_base, primeiro_link["href"])
 
-        resultados.append({"colunas": textos, "pdf_url": link_pdf})
+        resultados.append({"colunas": textos, "detalhe_url": link_detalhe})
 
     return cabecalhos, resultados
+
+
+def resolver_arquivo_original(url_detalhe, timeout=25):
+    """A partir do link de um resultado, localiza e baixa o arquivo (PDF).
+
+    Alguns links de resultado já apontam direto para o PDF; outros levam a
+    uma página de "extrato" do instrumento, de onde é preciso seguir o link
+    de download do arquivo original. Retorna (url_final, conteudo_bytes,
+    content_type) ou (None, None, None) se não for possível localizar o PDF.
+    """
+    sessao = _sessao_http()
+
+    try:
+        resposta = sessao.get(url_detalhe, timeout=timeout, allow_redirects=True)
+        resposta.raise_for_status()
+    except requests.RequestException:
+        return None, None, None
+
+    tipo = (resposta.headers.get("Content-Type") or "").lower()
+    if "pdf" in tipo:
+        return resposta.url, resposta.content, resposta.headers.get("Content-Type")
+
+    soup = BeautifulSoup(resposta.text, "html.parser")
+    candidato = None
+    for link in soup.find_all("a", href=True):
+        texto_link = link.get_text(" ", strip=True).lower()
+        href = link["href"]
+        if href.lower().endswith(".pdf") or any(
+            p in texto_link for p in PALAVRAS_CHAVE_ARQUIVO_ORIGINAL
+        ):
+            candidato = urljoin(resposta.url, href)
+            break
+
+    if candidato is None:
+        return None, None, None
+
+    try:
+        resposta_arquivo = sessao.get(candidato, timeout=timeout, allow_redirects=True)
+        resposta_arquivo.raise_for_status()
+    except requests.RequestException:
+        return None, None, None
+
+    tipo_arquivo = (resposta_arquivo.headers.get("Content-Type") or "").lower()
+    if "pdf" not in tipo_arquivo and not candidato.lower().endswith(".pdf"):
+        return None, None, None
+
+    return (
+        resposta_arquivo.url,
+        resposta_arquivo.content,
+        resposta_arquivo.headers.get("Content-Type"),
+    )
 
 
 def buscar_por_cnpj(cnpj_bruto, timeout=25):
@@ -191,7 +271,7 @@ def buscar_por_cnpj(cnpj_bruto, timeout=25):
         ) from exc
 
     soup_form = BeautifulSoup(resposta_form.text, "html.parser")
-    form = soup_form.find("form")
+    form = _selecionar_formulario_busca(soup_form)
     if form is None:
         raise MediadorError(
             "O formulário de busca do site oficial não foi encontrado "
@@ -214,6 +294,8 @@ def buscar_por_cnpj(cnpj_bruto, timeout=25):
             "Não foi possível concluir a consulta no site oficial do Mediador."
         ) from exc
 
+    _salvar_debug(resposta.text)
+
     texto_resposta = resposta.text.lower()
     if "captcha" in texto_resposta:
         raise MediadorError(
@@ -224,7 +306,22 @@ def buscar_por_cnpj(cnpj_bruto, timeout=25):
     soup_resultado = BeautifulSoup(resposta.text, "html.parser")
     tabela = _selecionar_tabela_resultados(soup_resultado)
     if tabela is None:
-        return [], [], resposta.url
+        if any(frase in texto_resposta for frase in FRASES_SEM_RESULTADO):
+            return [], [], resposta.url
+        raise MediadorError(
+            "A página de resultados do site oficial não veio no formato esperado "
+            "(o layout pode ter mudado). Use a busca manual abaixo — o arquivo "
+            "debug_ultima_consulta.html, salvo na pasta do programa, ajuda a "
+            "diagnosticar o que aconteceu."
+        )
 
     cabecalhos, resultados = _extrair_resultados(tabela, resposta.url)
+    if not resultados and not any(frase in texto_resposta for frase in FRASES_SEM_RESULTADO):
+        raise MediadorError(
+            "Não foi possível interpretar a tabela de resultados do site oficial "
+            "(o layout pode ter mudado). Use a busca manual abaixo — o arquivo "
+            "debug_ultima_consulta.html, salvo na pasta do programa, ajuda a "
+            "diagnosticar o que aconteceu."
+        )
+
     return cabecalhos, resultados, resposta.url
