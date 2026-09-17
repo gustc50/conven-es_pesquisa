@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buscador de Convenção Coletiva</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Buscador de Convenção Coletiva</h1>
+      <p class="subtitulo">
+        Consulta pública ao Sistema Mediador (Ministério do Trabalho e Emprego)
+        pelo CNPJ do sindicato.
+      </p>
+    </header>
+
+    <form id="form-busca" class="busca">
+      <label for="cnpj">CNPJ do sindicato</label>
+      <div class="campo-busca">
+        <input
+          type="text"
+          id="cnpj"
+          name="cnpj"
+          placeholder="00.000.000/0000-00"
+          inputmode="numeric"
+          maxlength="18"
+          autocomplete="off"
+          required
+        >
+        <button type="submit" id="botao-buscar">Buscar</button>
+      </div>
+      <p id="erro-cnpj" class="erro-campo" hidden></p>
+    </form>
+
+    <div id="status" class="status" hidden></div>
+
+    <div id="resultados" class="resultados" hidden>
+      <table id="tabela-resultados">
+        <thead><tr id="linha-cabecalho"></tr></thead>
+        <tbody id="corpo-tabela"></tbody>
+      </table>
+    </div>
+
+    <div id="aviso-manual" class="aviso-manual" hidden>
+      <p>Não foi possível concluir a busca automaticamente pelo aplicativo.</p>
+      <a id="link-manual" href="#" target="_blank" rel="noopener">
+        Abrir busca manual no site oficial do Mediador
+      </a>
+    </div>
+
+    <footer>
+      <p>
+        Fonte dos dados: Sistema Mediador — mediador.trabalho.gov.br.
+        Ferramenta não oficial, criada apenas para facilitar a consulta pública.
+      </p>
+    </footer>
+  </div>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
