@@ -102,6 +102,23 @@ h1 {
   font-size: 0.9rem;
 }
 
+.opcao-visivel {
+  display: block;
+  margin-top: 12px;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.diagnostico {
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.diagnostico a {
+  color: var(--cor-primaria);
+}
+
 .status {
   padding: 14px 16px;
   border-radius: 8px;

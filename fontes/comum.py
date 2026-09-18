@@ -1,10 +1,6 @@
-"""Utilitários compartilhados pelos clientes de consulta a fontes externas.
-
-Cada fonte (Mediador, SACC-DIEESE, etc.) tem seu próprio módulo com as
-constantes específicas (URL, palavras-chave de campo), mas todas usam esta
-mesma engine genérica: ela descobre os campos do formulário e a tabela de
-resultados em tempo de execução, em vez de fixar nomes, para se adaptar
-melhor a pequenas mudanças de layout dos sites públicos.
+"""Utilitários compartilhados pelos clientes de consulta a fontes externas:
+validação de CNPJ, leitura da tabela de resultados e download do arquivo
+original. A navegação em si fica em navegador.py.
 """
 import os
 import re
@@ -80,58 +76,6 @@ def salvar_debug(nome_arquivo, texto):
             arquivo.write(texto)
     except OSError:
         pass
-
-
-def _localizar_campo_por_palavras(form, palavras_chave):
-    for palavra in palavras_chave:
-        padrao = re.compile(palavra, re.IGNORECASE)
-        campo = form.find(["input", "select", "textarea"], attrs={"name": padrao})
-        if campo is not None:
-            return campo
-    for palavra in palavras_chave:
-        padrao = re.compile(palavra, re.IGNORECASE)
-        campo = form.find(["input", "select", "textarea"], attrs={"id": padrao})
-        if campo is not None:
-            return campo
-    for label in form.find_all("label"):
-        texto_label = label.get_text(" ", strip=True).lower()
-        if any(palavra in texto_label for palavra in palavras_chave):
-            id_destino = label.get("for")
-            if id_destino:
-                campo = form.find(["input", "select", "textarea"], id=id_destino)
-                if campo is not None:
-                    return campo
-    return None
-
-
-def selecionar_formulario_busca(soup, palavras_chave_campo):
-    formularios = soup.find_all("form")
-    for form in formularios:
-        if _localizar_campo_por_palavras(form, palavras_chave_campo) is not None:
-            return form
-    return formularios[0] if formularios else None
-
-
-def montar_dados_formulario(form, valor_cnpj, palavras_chave_campo, mensagem_campo_nao_encontrado):
-    dados = {}
-    for campo in form.find_all(["input", "select", "textarea"]):
-        nome = campo.get("name")
-        if not nome:
-            continue
-        if campo.name == "select":
-            opcao = campo.find("option", selected=True) or campo.find("option")
-            dados[nome] = opcao.get("value", "") if opcao else ""
-        elif (campo.get("type") or "text").lower() in ("checkbox", "radio"):
-            if campo.has_attr("checked"):
-                dados[nome] = campo.get("value", "on")
-        else:
-            dados[nome] = campo.get("value", "")
-
-    campo_cnpj = _localizar_campo_por_palavras(form, palavras_chave_campo)
-    if campo_cnpj is None or not campo_cnpj.get("name"):
-        raise FonteError(mensagem_campo_nao_encontrado)
-    dados[campo_cnpj["name"]] = valor_cnpj
-    return dados
 
 
 def selecionar_tabela_resultados(soup):

@@ -115,6 +115,22 @@ function renderizarFonte(fonte) {
     mensagem.className = "status erro";
     mensagem.textContent = fonte.erro || "Não foi possível concluir a busca nesta fonte.";
     secao.appendChild(mensagem);
+
+    if (fonte.diagnostico && fonte.diagnostico.length) {
+      const bloco = document.createElement("p");
+      bloco.className = "diagnostico";
+      bloco.appendChild(document.createTextNode("Arquivos de diagnóstico: "));
+      fonte.diagnostico.forEach((nome, indice) => {
+        if (indice > 0) {
+          bloco.appendChild(document.createTextNode(" · "));
+        }
+        const link = document.createElement("a");
+        link.href = `/diagnostico/${encodeURIComponent(nome)}`;
+        link.textContent = nome;
+        bloco.appendChild(link);
+      });
+      secao.appendChild(bloco);
+    }
   } else if (!fonte.resultados.length) {
     const mensagem = document.createElement("p");
     mensagem.className = "status vazio";
@@ -158,13 +174,13 @@ form.addEventListener("submit", async (evento) => {
   }
 
   botaoBuscar.disabled = true;
-  mostrarStatus("Buscando nas fontes disponíveis...", "carregando");
+  mostrarStatus("Buscando nas fontes disponíveis (pode levar alguns segundos)...", "carregando");
 
   try {
     const resposta = await fetch("/buscar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj }),
+      body: JSON.stringify({ cnpj, visivel: document.getElementById("visivel").checked }),
     });
     const dados = await resposta.json();
 

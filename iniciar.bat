@@ -38,6 +38,13 @@ echo Instalando dependencias (pode levar um minuto na primeira vez)...
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet -r requirements.txt
 
+if not exist venv\.chromium_instalado (
+    echo Baixando o navegador usado na busca automatica...
+    echo Isso acontece so na primeira vez e pode levar alguns minutos.
+    python -m playwright install chromium
+    if not errorlevel 1 echo ok> venv\.chromium_instalado
+)
+
 echo.
 echo Iniciando o Buscador de Convencao Coletiva...
 echo O navegador sera aberto automaticamente em instantes.

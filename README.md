@@ -40,30 +40,50 @@ pessoa já pode fazer diretamente nesses sites.
    o PDF (quando disponível direto) ou visualizar a página oficial.
 6. Para encerrar, feche a janela preta que ficou aberta (o servidor local).
 
+## Como a busca funciona
+
+Os sites consultados montam a tabela de resultados via JavaScript, então não
+adianta enviar o formulário por HTTP puro — os resultados simplesmente não
+apareceriam. Por isso o aplicativo usa um **navegador de verdade**
+(Chromium, via Playwright) rodando em segundo plano: ele abre a página,
+preenche o CNPJ, clica no botão de pesquisa e lê a tabela já renderizada.
+
+Os campos são localizados pelo **texto visível** (rótulo, placeholder, texto
+do botão) em vez de por nomes internos de HTML, que nesses sistemas são
+gerados automaticamente e mudam com frequência.
+
 ## Estrutura do projeto
 
-- `iniciar.bat` — instala dependências e inicia o aplicativo.
+- `iniciar.bat` — instala dependências (incluindo o navegador) e inicia o app.
 - `app.py` — servidor web local (Flask): página inicial, endpoint de busca
-  (consulta todas as fontes) e endpoint de download do PDF.
-- `fontes/comum.py` — engine genérica de raspagem (descoberta de formulário,
-  tabela de resultados e arquivo original), reaproveitada por todas as fontes.
-- `fontes/mediador.py`, `fontes/dieese.py` — clientes específicos de cada fonte
-  (URL, palavras-chave de campo).
+  (consulta todas as fontes), download do PDF e download dos arquivos de
+  diagnóstico.
+- `fontes/navegador.py` — automação do navegador (abrir página, achar campo,
+  clicar, esperar resultado, salvar diagnóstico).
+- `fontes/comum.py` — validação de CNPJ, leitura da tabela de resultados e
+  download do arquivo original.
+- `fontes/mediador.py`, `fontes/dieese.py` — configuração de cada fonte (URL,
+  palavras-chave de campo e de botão).
 - `templates/`, `static/` — interface web (HTML/CSS/JS).
+
+## Se a busca falhar
+
+1. Marque a opção **"Mostrar o navegador durante a busca"** e busque de novo:
+   uma janela do navegador abre e você vê exatamente onde o processo trava.
+2. Quando uma fonte dá erro, o app salva automaticamente um **print da tela**
+   (`debug_mediador.png` / `debug_dieese.png`) e o **HTML da página**
+   (`debug_mediador.html` / `debug_dieese.html`) na pasta do programa, e
+   oferece os dois para download logo abaixo da mensagem de erro. Esses
+   arquivos mostram o que o site realmente respondeu e são o suficiente para
+   ajustar o programa.
+3. Em qualquer caso, o link de busca manual naquela fonte continua disponível.
 
 ## Limitações e observações
 
 - É necessária conexão com a internet: o aplicativo consulta os sites
   oficiais em tempo real, sem armazenar nenhum dado.
-- O aplicativo lê o formulário de busca de cada site a cada consulta, em vez
-  de usar campos fixos, para se adaptar melhor a pequenas mudanças de
-  layout. Ainda assim, se um site mudar significativamente ou exigir
-  verificação adicional (captcha/login), a busca automática nessa fonte pode
-  falhar — nesse caso é exibido, só para aquela fonte, um link para a busca
-  manual, enquanto as outras fontes continuam funcionando normalmente.
-- Se a busca não trouxer o resultado esperado em alguma fonte, o aplicativo
-  salva a última resposta recebida em `debug_ultima_consulta_mediador.html`
-  ou `debug_ultima_consulta_dieese.html`, na pasta do programa. Esses
-  arquivos ajudam a entender o que o site retornou (ex.: se o layout mudou)
-  e podem ser compartilhados para diagnóstico.
+- Na primeira execução, o `iniciar.bat` baixa o Chromium usado na automação
+  (algumas centenas de MB). Isso acontece uma única vez.
+- Se um site exigir verificação adicional (captcha/login), a busca automática
+  naquela fonte falha — mas as outras fontes continuam funcionando.
 - Roda apenas em `127.0.0.1` (acesso local à sua máquina).

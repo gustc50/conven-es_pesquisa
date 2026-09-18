@@ -4,20 +4,27 @@ Interface para consultar, pelo CNPJ do sindicato, instrumentos coletivos
 em múltiplas fontes públicas (Sistema Mediador, SACC-DIEESE) e baixar o
 PDF correspondente.
 """
+import os
 import re
 import threading
 import time
 import webbrowser
 from urllib.parse import urlparse
 
-from flask import Flask, Response, jsonify, redirect, render_template, request
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file
 
 import fontes
-from fontes.comum import FonteError, cnpj_valido, resolver_arquivo_original
+from fontes.comum import PASTA_PROJETO, FonteError, cnpj_valido, resolver_arquivo_original
 
 app = Flask(__name__)
 
 HOSTS_PERMITIDOS_DOWNLOAD = ("trabalho.gov.br", "dieese.org.br")
+
+ARQUIVOS_DIAGNOSTICO = [
+    nome
+    for modulo in fontes.FONTES
+    for nome in (modulo.CONFIG["arquivo_html"], modulo.CONFIG["arquivo_print"])
+]
 
 
 def _host_permitido(host):
@@ -33,6 +40,7 @@ def index():
 def buscar():
     dados = request.get_json(silent=True) or {}
     cnpj = dados.get("cnpj", "")
+    visivel = bool(dados.get("visivel"))
 
     if not cnpj_valido(cnpj):
         return jsonify(ok=False, erro="CNPJ inválido. Confira o número informado."), 400
@@ -41,7 +49,7 @@ def buscar():
     for modulo in fontes.FONTES:
         item = {"nome": modulo.NOME_FONTE, "url_manual": modulo.URL_BUSCA_MANUAL}
         try:
-            cabecalhos, resultados, url_consulta = modulo.buscar_por_cnpj(cnpj)
+            cabecalhos, resultados, url_consulta = modulo.buscar_por_cnpj(cnpj, visivel=visivel)
             item["ok"] = True
             item["cabecalhos"] = cabecalhos
             item["resultados"] = resultados
@@ -54,9 +62,29 @@ def buscar():
         except FonteError as exc:
             item["ok"] = False
             item["erro"] = str(exc)
+            item["diagnostico"] = [
+                nome
+                for nome in (
+                    modulo.CONFIG["arquivo_print"],
+                    modulo.CONFIG["arquivo_html"],
+                )
+                if os.path.exists(os.path.join(PASTA_PROJETO, nome))
+            ]
         resultado_fontes.append(item)
 
     return jsonify(ok=True, fontes=resultado_fontes)
+
+
+@app.route("/diagnostico/<nome>")
+def diagnostico(nome):
+    if nome not in ARQUIVOS_DIAGNOSTICO:
+        return "Arquivo de diagnóstico desconhecido.", 404
+
+    caminho = os.path.join(PASTA_PROJETO, nome)
+    if not os.path.exists(caminho):
+        return "Arquivo de diagnóstico ainda não foi gerado.", 404
+
+    return send_file(caminho, as_attachment=True)
 
 
 @app.route("/download")
