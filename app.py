@@ -1,34 +1,26 @@
 """Buscador de Convenção Coletiva — aplicação web local (Flask).
 
 Interface para consultar, pelo CNPJ do sindicato, instrumentos coletivos
-em múltiplas fontes públicas (Sistema Mediador, SACC-DIEESE) e baixar o
-PDF correspondente.
+registrados no Sistema Mediador (Ministério do Trabalho e Emprego). Cada
+resultado abre o extrato oficial no navegador, de onde a convenção é baixada.
 """
 import os
-import re
 import threading
 import time
 import webbrowser
-from urllib.parse import urlparse
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file
 
 import fontes
-from fontes.comum import PASTA_PROJETO, FonteError, cnpj_valido, resolver_arquivo_original
+from fontes.comum import PASTA_PROJETO, FonteError, cnpj_valido
 
 app = Flask(__name__)
-
-HOSTS_PERMITIDOS_DOWNLOAD = ("trabalho.gov.br", "dieese.org.br")
 
 ARQUIVOS_DIAGNOSTICO = [
     nome
     for modulo in fontes.FONTES
     for nome in (modulo.CONFIG["arquivo_html"], modulo.CONFIG["arquivo_print"])
 ]
-
-
-def _host_permitido(host):
-    return any(host == h or host.endswith("." + h) for h in HOSTS_PERMITIDOS_DOWNLOAD)
 
 
 @app.route("/")
@@ -40,7 +32,6 @@ def index():
 def buscar():
     dados = request.get_json(silent=True) or {}
     cnpj = dados.get("cnpj", "")
-    visivel = bool(dados.get("visivel"))
 
     if not cnpj_valido(cnpj):
         return jsonify(ok=False, erro="CNPJ inválido. Confira o número informado."), 400
@@ -49,7 +40,7 @@ def buscar():
     for modulo in fontes.FONTES:
         item = {"nome": modulo.NOME_FONTE, "url_manual": modulo.URL_BUSCA_MANUAL}
         try:
-            cabecalhos, resultados, url_consulta = modulo.buscar_por_cnpj(cnpj, visivel=visivel)
+            cabecalhos, resultados, url_consulta = modulo.buscar_por_cnpj(cnpj)
             item["ok"] = True
             item["cabecalhos"] = cabecalhos
             item["resultados"] = resultados
@@ -85,33 +76,6 @@ def diagnostico(nome):
         return "Arquivo de diagnóstico ainda não foi gerado.", 404
 
     return send_file(caminho, as_attachment=True)
-
-
-@app.route("/download")
-def download():
-    url = request.args.get("url", "")
-    host = urlparse(url).hostname or ""
-
-    if not url.startswith("https://") or not _host_permitido(host):
-        return "Download não permitido para esta URL.", 400
-
-    url_final, conteudo, content_type = resolver_arquivo_original(url)
-
-    if conteudo is None:
-        # Não foi possível localizar o PDF diretamente: manda o usuário para
-        # a página oficial do instrumento, onde ele pode visualizar/baixar.
-        return redirect(url, code=302)
-
-    nome_arquivo = url_final.rstrip("/").split("/")[-1] or "convencao.pdf"
-    nome_arquivo = re.sub(r"[^A-Za-z0-9._-]", "_", nome_arquivo)
-    if not nome_arquivo.lower().endswith(".pdf"):
-        nome_arquivo += ".pdf"
-
-    return Response(
-        conteudo,
-        mimetype=content_type or "application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
-    )
 
 
 def _abrir_navegador(url):

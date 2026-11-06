@@ -82,10 +82,11 @@ function criarTabelaResultados(fonte) {
     });
 
     const tdAcao = document.createElement("td");
-    if (resultado.detalhe_url) {
+    if (/^https?:\/\//i.test(resultado.detalhe_url || "")) {
       const link = document.createElement("a");
-      link.href = `/download?url=${encodeURIComponent(resultado.detalhe_url)}`;
-      link.textContent = "Baixar / abrir";
+      link.href = resultado.detalhe_url;
+      link.textContent = "Abrir / baixar";
+      link.title = "Abre o extrato oficial no seu navegador, de onde dá para baixar ou imprimir em PDF";
       link.className = "botao-download";
       link.target = "_blank";
       link.rel = "noopener";
@@ -100,6 +101,22 @@ function criarTabelaResultados(fonte) {
   tabela.appendChild(corpoTabela);
 
   return tabela;
+}
+
+function criarBotaoCopiarCnpj() {
+  const botao = document.createElement("button");
+  botao.type = "button";
+  botao.className = "botao-copiar";
+  botao.textContent = "Copiar CNPJ";
+  botao.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(apenasDigitos(inputCnpj.value));
+      botao.textContent = "CNPJ copiado";
+    } catch (erro) {
+      botao.textContent = "Não foi possível copiar";
+    }
+  });
+  return botao;
 }
 
 function renderizarFonte(fonte) {
@@ -151,8 +168,10 @@ function renderizarFonte(fonte) {
     link.href = fonte.url_manual;
     link.target = "_blank";
     link.rel = "noopener";
-    link.textContent = `Abrir busca manual em ${fonte.nome}`;
+    link.textContent = "Abrir a busca no site oficial";
     aviso.appendChild(link);
+    aviso.appendChild(document.createTextNode(" "));
+    aviso.appendChild(criarBotaoCopiarCnpj());
     secao.appendChild(aviso);
   }
 
@@ -174,13 +193,17 @@ form.addEventListener("submit", async (evento) => {
   }
 
   botaoBuscar.disabled = true;
-  mostrarStatus("Buscando nas fontes disponíveis (pode levar alguns segundos)...", "carregando");
+  mostrarStatus(
+    "Buscando no Mediador... Uma janela do navegador foi aberta: se aparecer a " +
+      "verificação de segurança, clique nela e aguarde.",
+    "carregando"
+  );
 
   try {
     const resposta = await fetch("/buscar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj, visivel: document.getElementById("visivel").checked }),
+      body: JSON.stringify({ cnpj }),
     });
     const dados = await resposta.json();
 

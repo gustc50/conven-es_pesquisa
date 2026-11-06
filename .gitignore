@@ -2,8 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
+perfil_navegador/
 debug_mediador.html
 debug_mediador.png
-debug_dieese.html
-debug_dieese.png
-debug_ultima_consulta_*.html

@@ -1,107 +1,72 @@
-"""Engine de automação de navegador (Playwright) usada pelas fontes públicas.
+"""Automação de navegador (Playwright) em modo assistido.
 
-Os sites consultados montam a tabela de resultados via JavaScript, então não
-basta enviar o formulário por HTTP: é preciso um navegador de verdade, que
-preencha o campo, clique no botão de pesquisa e leia a tabela já renderizada.
+O site do Mediador fica atrás da proteção anti-robô da Cloudflare. O app não
+tenta enganar essa proteção: abre uma janela de navegador visível e, se a
+verificação aparecer, espera a própria pessoa resolvê-la. Depois disso,
+marca o critério de CNPJ, digita o número, pesquisa e lê a tabela.
 
-Os elementos são localizados pelo texto visível (rótulo, placeholder, texto do
-botão) em vez de por atributos internos de HTML, que mudam com frequência.
-Quando algo falha, salva print da tela e HTML renderizado para diagnóstico.
+O perfil do navegador fica salvo em perfil_navegador/, como num navegador
+comum, então a verificação tende a não reaparecer a cada busca.
 """
 import os
+import re
+import threading
+import time
 
 from bs4 import BeautifulSoup
 
 from . import comum
 from .comum import FonteError
 
-TIMEOUT_NAVEGACAO_MS = 45000
-TIMEOUT_ELEMENTO_MS = 8000
-TIMEOUT_RESULTADO_MS = 20000
+PASTA_PERFIL = os.path.join(comum.PASTA_PROJETO, "perfil_navegador")
 
-MENSAGEM_SEM_PLAYWRIGHT = (
-    "O componente de navegador (Playwright) não está instalado. "
-    "Feche o programa e rode o iniciar.bat novamente para instalá-lo."
+TIMEOUT_NAVEGACAO_MS = 60000
+TIMEOUT_ELEMENTO_MS = 8000
+TIMEOUT_RESULTADO_MS = 30000
+TEMPO_MAXIMO_VERIFICACAO_S = 180
+
+SELETOR_CAMPO_TEXTO = (
+    "input:not([type]), input[type=text], input[type=search], "
+    "input[type=tel], input[type=number], textarea"
 )
+TITULOS_VERIFICACAO = ["just a moment", "um momento", "attention required"]
+TEXTOS_VERIFICACAO = [
+    "verify you are human",
+    "verifique se você é humano",
+    "confirme que você é humano",
+    "enable javascript and cookies",
+    "checking your browser",
+]
+
+_trava_busca = threading.Lock()
 
 
 def _importar_playwright():
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
-        raise FonteError(MENSAGEM_SEM_PLAYWRIGHT) from exc
+        raise FonteError(
+            "O componente de navegador (Playwright) não está instalado. "
+            "Feche o programa e rode o iniciar.bat novamente para instalá-lo."
+        ) from exc
     return sync_playwright
 
 
 def _primeiro_visivel(candidatos, timeout_ms=TIMEOUT_ELEMENTO_MS):
-    """Tenta cada estratégia de localização e devolve a primeira que aparecer."""
-    for construir in candidatos:
-        try:
-            alvo = construir().first
-            alvo.wait_for(state="visible", timeout=timeout_ms)
-            return alvo
-        except Exception:
-            continue
-    return None
-
-
-def _localizar_campo(pagina, palavras_chave):
-    import re
-
-    padrao = re.compile("|".join(palavras_chave), re.IGNORECASE)
-    seletor_atributos = ", ".join(
-        f"input[{atributo}*='{palavra}' i]"
-        for palavra in palavras_chave
-        for atributo in ("id", "name", "aria-label", "title")
-    )
-
-    return _primeiro_visivel(
-        [
-            lambda: pagina.get_by_label(padrao),
-            lambda: pagina.get_by_placeholder(padrao),
-            lambda: pagina.locator(seletor_atributos),
-        ]
-    )
-
-
-def _localizar_botao(pagina, palavras_botao):
-    import re
-
-    padrao = re.compile("|".join(palavras_botao), re.IGNORECASE)
-    seletor_atributos = ", ".join(
-        f"input[type=submit][value*='{palavra}' i], button[title*='{palavra}' i]"
-        for palavra in palavras_botao
-    )
-
-    return _primeiro_visivel(
-        [
-            lambda: pagina.get_by_role("button", name=padrao),
-            lambda: pagina.get_by_role("link", name=padrao),
-            lambda: pagina.locator(seletor_atributos),
-            lambda: pagina.get_by_text(padrao),
-        ]
-    )
-
-
-def _aguardar_resultados(pagina):
-    """Espera até a tabela aparecer ou o site dizer que não há resultados."""
-    frases = [frase.lower() for frase in comum.FRASES_SEM_RESULTADO]
-    try:
-        pagina.wait_for_load_state("networkidle", timeout=TIMEOUT_RESULTADO_MS)
-    except Exception:
-        pass
-    try:
-        pagina.wait_for_function(
-            """(frases) => {
-                if (document.querySelector('table tr td')) return true;
-                const texto = (document.body.innerText || '').toLowerCase();
-                return frases.some((frase) => texto.includes(frase));
-            }""",
-            arg=frases,
-            timeout=TIMEOUT_RESULTADO_MS,
-        )
-    except Exception:
-        pass
+    """Testa todas as estratégias de localização em rodízio até uma achar um
+    elemento visível, sem gastar o tempo inteiro esperando em cada uma."""
+    limite = time.monotonic() + timeout_ms / 1000
+    while True:
+        for construir in candidatos:
+            try:
+                alvo = construir().first
+                if alvo.count() and alvo.is_visible():
+                    return alvo
+            except Exception:
+                continue
+        if time.monotonic() > limite:
+            return None
+        time.sleep(0.25)
 
 
 def _salvar_diagnostico(pagina, config):
@@ -125,7 +90,219 @@ def _dica_diagnostico(config):
     )
 
 
-def buscar(config, cnpj, visivel=False):
+def _falhar(pagina, config, mensagem):
+    _salvar_diagnostico(pagina, config)
+    raise FonteError(mensagem + _dica_diagnostico(config))
+
+
+def _em_verificacao(pagina):
+    try:
+        titulo = (pagina.title() or "").lower()
+        if any(sinal in titulo for sinal in TITULOS_VERIFICACAO):
+            return True
+        if pagina.locator("iframe[src*='challenges.cloudflare.com']").count():
+            return True
+        texto = pagina.locator("body").inner_text(timeout=2000).lower()
+    except Exception:
+        # A página está no meio de um redirecionamento da própria verificação.
+        return True
+    return any(sinal in texto for sinal in TEXTOS_VERIFICACAO)
+
+
+def _aguardar_verificacao_humana(pagina, config):
+    limite = time.monotonic() + TEMPO_MAXIMO_VERIFICACAO_S
+    while True:
+        if pagina.is_closed():
+            raise FonteError(
+                "A janela do navegador foi fechada antes de a busca terminar."
+            )
+        if not _em_verificacao(pagina):
+            return
+        if time.monotonic() > limite:
+            _falhar(
+                pagina,
+                config,
+                f"A verificação de segurança de {config['nome']} não foi concluída "
+                "(ou o site não aceitou o navegador do aplicativo). Use a busca no "
+                "site oficial pelo botão abaixo.",
+            )
+        pagina.wait_for_timeout(1000)
+
+
+def _marcar_criterio(pagina, padrao):
+    """Em formulários de "critérios", o campo só vale com a caixa marcada."""
+    caixa = _primeiro_visivel(
+        [lambda: pagina.get_by_role("checkbox", name=padrao)], timeout_ms=2000
+    )
+    if caixa is None:
+        return
+    try:
+        if not caixa.is_checked():
+            caixa.check()
+    except Exception:
+        pass
+
+
+def _localizar_campo(pagina, palavras_chave, padrao):
+    campos_texto = pagina.locator(SELETOR_CAMPO_TEXTO)
+    palavras_simples = [p for p in palavras_chave if " " not in p]
+    seletor_atributos = ", ".join(
+        f"[{atributo}*='{palavra}' i]"
+        for palavra in palavras_simples
+        for atributo in ("id", "name", "aria-label", "title", "placeholder")
+    )
+    texto_proximo = (
+        "xpath=//*[text()[contains(translate(., 'cnpj', 'CNPJ'), 'CNPJ')]]"
+        "/following::input[not(@type) or @type='text' or @type='search' or @type='tel'][1]"
+    )
+
+    return _primeiro_visivel(
+        [
+            lambda: pagina.get_by_label(padrao).and_(campos_texto),
+            lambda: pagina.get_by_placeholder(padrao).and_(campos_texto),
+            lambda: pagina.locator(seletor_atributos).and_(campos_texto),
+            lambda: pagina.locator(texto_proximo),
+        ]
+    )
+
+
+def _localizar_botao(pagina, palavras_botao):
+    padrao = re.compile("|".join(palavras_botao), re.IGNORECASE)
+    seletor_atributos = ", ".join(
+        f"input[type=submit][value*='{palavra}' i], input[type=button][value*='{palavra}' i]"
+        for palavra in palavras_botao
+    )
+
+    return _primeiro_visivel(
+        [
+            lambda: pagina.get_by_role("button", name=padrao),
+            lambda: pagina.locator(seletor_atributos),
+            lambda: pagina.get_by_role("link", name=padrao),
+        ]
+    )
+
+
+def _aguardar_resultados(pagina, config):
+    """Espera um sinal de resultado (link de detalhe, nº de registro ou "nenhum
+    registro"). Se nada disso aparecer, segue mesmo assim e a leitura decide."""
+    try:
+        pagina.wait_for_load_state("networkidle", timeout=TIMEOUT_RESULTADO_MS)
+    except Exception:
+        pass
+    try:
+        pagina.wait_for_function(
+            """(args) => {
+                const texto = document.body.innerText || '';
+                const minusculo = texto.toLowerCase();
+                if (args.frases.some((f) => minusculo.includes(f))) return true;
+                if (args.registro && new RegExp(args.registro, 'i').test(texto)) return true;
+                return Array.from(document.querySelectorAll('table a')).some((a) => {
+                    const alvo = [a.innerText, a.getAttribute('href'), a.getAttribute('onclick')]
+                        .join(' ').toLowerCase();
+                    return args.palavras.some((p) => alvo.includes(p));
+                });
+            }""",
+            arg={
+                "frases": [f.lower() for f in comum.FRASES_SEM_RESULTADO],
+                "registro": config.get("padrao_registro"),
+                "palavras": config["palavras_link_detalhe"],
+            },
+            timeout=TIMEOUT_RESULTADO_MS,
+        )
+    except Exception:
+        pass
+
+
+def _ler_resultados(pagina, config):
+    html_renderizado = pagina.content()
+    comum.salvar_debug(config["arquivo_html"], html_renderizado)
+
+    texto_pagina = html_renderizado.lower()
+    sem_resultado = any(frase in texto_pagina for frase in comum.FRASES_SEM_RESULTADO)
+
+    soup = BeautifulSoup(html_renderizado, "html.parser")
+    tabela, com_evidencia = comum.selecionar_tabela_resultados(
+        soup, config["palavras_link_detalhe"], config.get("padrao_registro")
+    )
+    if sem_resultado and not com_evidencia:
+        # O site disse que não há resultados e nenhuma tabela parece uma
+        # lista de convenções (só layout ou rodapé).
+        return [], []
+    if tabela is None:
+        _falhar(
+            pagina,
+            config,
+            f"A página de resultados de {config['nome']} não veio no formato esperado.",
+        )
+
+    cabecalhos, resultados = comum.extrair_resultados(
+        tabela, pagina.url, config["palavras_link_detalhe"]
+    )
+    if not resultados and not sem_resultado:
+        _falhar(
+            pagina,
+            config,
+            f"Não foi possível interpretar a tabela de resultados de {config['nome']}.",
+        )
+
+    montar_link = config.get("montar_link")
+    if montar_link:
+        for resultado in resultados:
+            if not resultado["detalhe_url"]:
+                resultado["detalhe_url"] = montar_link(resultado["colunas"])
+
+    return cabecalhos, resultados
+
+
+def _executar_busca(pagina, config, cnpj):
+    pagina.set_default_timeout(15000)
+    try:
+        pagina.goto(config["url"], wait_until="domcontentloaded", timeout=TIMEOUT_NAVEGACAO_MS)
+    except Exception as exc:
+        raise FonteError(
+            f"Não foi possível abrir o site de {config['nome']}. "
+            "Verifique sua conexão com a internet e tente novamente."
+        ) from exc
+
+    pagina.bring_to_front()
+    _aguardar_verificacao_humana(pagina, config)
+
+    padrao = re.compile("|".join(config["palavras_campo"]), re.IGNORECASE)
+    _marcar_criterio(pagina, padrao)
+
+    campo = _localizar_campo(pagina, config["palavras_campo"], padrao)
+    if campo is None:
+        _falhar(
+            pagina,
+            config,
+            f"Não foi possível localizar o campo de CNPJ em {config['nome']} "
+            "(o site pode ter mudado de layout).",
+        )
+
+    try:
+        campo.click()
+        campo.fill("")
+        # Digita tecla a tecla para que máscaras de CNPJ do site funcionem.
+        campo.press_sequentially(cnpj, delay=40)
+    except Exception:
+        _falhar(pagina, config, f"Não foi possível preencher o CNPJ em {config['nome']}.")
+
+    botao = _localizar_botao(pagina, config["palavras_botao"])
+    if botao is None:
+        _falhar(pagina, config, f"Não foi possível localizar o botão de pesquisa em {config['nome']}.")
+
+    botao.click()
+    _aguardar_resultados(pagina, config)
+
+    if _em_verificacao(pagina):
+        _aguardar_verificacao_humana(pagina, config)
+        _aguardar_resultados(pagina, config)
+
+    cabecalhos, resultados = _ler_resultados(pagina, config)
+    return cabecalhos, resultados, pagina.url
+
+
+def buscar(config, cnpj):
     """Executa a busca por CNPJ na fonte descrita por `config`.
 
     Retorna (cabecalhos, resultados, url_da_consulta).
@@ -133,92 +310,29 @@ def buscar(config, cnpj, visivel=False):
     """
     sync_playwright = _importar_playwright()
 
-    with sync_playwright() as playwright:
-        try:
-            navegador = playwright.chromium.launch(headless=not visivel)
-        except Exception as exc:
-            raise FonteError(MENSAGEM_SEM_PLAYWRIGHT) from exc
+    if not _trava_busca.acquire(blocking=False):
+        raise FonteError("Já existe uma busca em andamento. Aguarde ela terminar.")
 
-        contexto = navegador.new_context(
-            locale="pt-BR",
-            user_agent=comum.USER_AGENT,
-            viewport={"width": 1440, "height": 900},
-        )
-        pagina = contexto.new_page()
-
-        try:
+    try:
+        with sync_playwright() as playwright:
             try:
-                pagina.goto(
-                    config["url"],
-                    wait_until="domcontentloaded",
-                    timeout=TIMEOUT_NAVEGACAO_MS,
+                contexto = playwright.chromium.launch_persistent_context(
+                    PASTA_PERFIL,
+                    headless=False,
+                    locale="pt-BR",
+                    no_viewport=True,
                 )
             except Exception as exc:
                 raise FonteError(
-                    f"Não foi possível abrir o site de {config['nome']}. "
-                    "Verifique sua conexão com a internet e tente novamente."
+                    "Não foi possível abrir o navegador do aplicativo. Se já houver "
+                    "uma janela dele aberta, feche-a; se for a primeira execução, "
+                    "rode o iniciar.bat novamente para instalá-lo."
                 ) from exc
 
-            campo = _localizar_campo(pagina, config["palavras_campo"])
-            if campo is None:
-                _salvar_diagnostico(pagina, config)
-                raise FonteError(
-                    f"Não foi possível localizar o campo de CNPJ em {config['nome']} "
-                    "(o site pode ter mudado de layout ou exigir outro caminho de "
-                    "consulta)." + _dica_diagnostico(config)
-                )
-
-            campo.fill(cnpj)
-
-            botao = _localizar_botao(pagina, config["palavras_botao"])
-            if botao is None:
-                _salvar_diagnostico(pagina, config)
-                raise FonteError(
-                    f"Não foi possível localizar o botão de pesquisa em "
-                    f"{config['nome']}." + _dica_diagnostico(config)
-                )
-
-            botao.click()
-            _aguardar_resultados(pagina)
-
-            html_renderizado = pagina.content()
-            comum.salvar_debug(config["arquivo_html"], html_renderizado)
-
-            texto_pagina = html_renderizado.lower()
-            if "captcha" in texto_pagina:
-                _salvar_diagnostico(pagina, config)
-                raise FonteError(
-                    f"{config['nome']} exigiu verificação adicional (captcha). "
-                    "Use a busca manual pelo link abaixo."
-                )
-
-            soup = BeautifulSoup(html_renderizado, "html.parser")
-            tabela = comum.selecionar_tabela_resultados(soup)
-            sem_resultado = any(
-                frase in texto_pagina for frase in comum.FRASES_SEM_RESULTADO
-            )
-
-            if tabela is None:
-                if sem_resultado:
-                    return [], [], pagina.url
-                _salvar_diagnostico(pagina, config)
-                raise FonteError(
-                    f"A página de resultados de {config['nome']} não veio no formato "
-                    "esperado." + _dica_diagnostico(config)
-                )
-
-            cabecalhos, resultados = comum.extrair_resultados(
-                tabela, pagina.url, config["palavras_link_detalhe"]
-            )
-
-            if not resultados and not sem_resultado:
-                _salvar_diagnostico(pagina, config)
-                raise FonteError(
-                    f"Não foi possível interpretar a tabela de resultados de "
-                    f"{config['nome']}." + _dica_diagnostico(config)
-                )
-
-            return cabecalhos, resultados, pagina.url
-        finally:
-            contexto.close()
-            navegador.close()
+            try:
+                pagina = contexto.pages[0] if contexto.pages else contexto.new_page()
+                return _executar_busca(pagina, config, cnpj)
+            finally:
+                contexto.close()
+    finally:
+        _trava_busca.release()

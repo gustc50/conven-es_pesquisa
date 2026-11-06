@@ -12,7 +12,7 @@
       <h1>Buscador de Convenção Coletiva</h1>
       <p class="subtitulo">
         Consulta pública ao Sistema Mediador (Ministério do Trabalho e Emprego)
-        e ao SACC-DIEESE pelo CNPJ do sindicato.
+        pelo CNPJ do sindicato.
       </p>
     </header>
 
@@ -32,10 +32,11 @@
         <button type="submit" id="botao-buscar">Buscar</button>
       </div>
       <p id="erro-cnpj" class="erro-campo" hidden></p>
-      <label class="opcao-visivel">
-        <input type="checkbox" id="visivel">
-        Mostrar o navegador durante a busca (útil para ver onde trava, se der erro)
-      </label>
+      <p class="instrucao">
+        Ao buscar, uma janela do navegador abre no site do Ministério. Se aparecer
+        a verificação de segurança ("Confirme que você é humano"), clique nela —
+        o resto da busca continua sozinho. Não feche essa janela durante a busca.
+      </p>
     </form>
 
     <div id="status" class="status" hidden></div>
@@ -46,11 +47,11 @@
       <summary>Outras fontes de consulta (não automatizadas pelo app)</summary>
       <div class="outras-fontes-conteudo">
         <p>
-          O app já consulta automaticamente o <strong>Sistema Mediador</strong> e o
-          <strong>SACC-DIEESE</strong> acima. As fontes abaixo não têm busca por
-          CNPJ integrada — por serem sites de cada sindicato/federação (sem
-          padrão único de busca) ou serviços pagos por assinatura, cujos termos
-          de uso não permitem automação. Ficam aqui como atalhos para consulta manual.
+          O app consulta automaticamente o <strong>Sistema Mediador</strong>, a
+          fonte oficial. As fontes abaixo não têm busca por CNPJ integrada: o
+          SACC-DIEESE exige login de entidade cadastrada, os sites de
+          sindicatos/federações não têm padrão único de busca, e as bases pagas
+          exigem assinatura. Ficam aqui como atalhos para consulta manual.
         </p>
         <ul>
           <li>
@@ -59,9 +60,9 @@
             </a>
           </li>
           <li>
-            <a href="https://www.dieese.org.br/sacc/pesquisa.do?method=setup" target="_blank" rel="noopener">
-              SACC-DIEESE — busca manual
-            </a>
+            <a href="https://www.dieese.org.br/canal/login.xhtml" target="_blank" rel="noopener">
+              SACC-DIEESE</a>
+            — exige login de entidade cadastrada no DIEESE.
           </li>
           <li>
             <a href="https://www.fiesp.com.br" target="_blank" rel="noopener">FIESP/CIESP</a>
@@ -84,9 +85,8 @@
 
     <footer>
       <p>
-        Fontes dos dados: Sistema Mediador (mediador.trabalho.gov.br) e
-        SACC-DIEESE (dieese.org.br). Ferramenta não oficial, criada apenas
-        para facilitar a consulta pública.
+        Fonte dos dados: Sistema Mediador (mediador.trabalho.gov.br).
+        Ferramenta não oficial, criada apenas para facilitar a consulta pública.
       </p>
     </footer>
   </div>

@@ -102,12 +102,21 @@ h1 {
   font-size: 0.9rem;
 }
 
-.opcao-visivel {
-  display: block;
-  margin-top: 12px;
-  font-weight: 400;
+.instrucao {
+  margin: 12px 0 0;
   font-size: 0.85rem;
   color: var(--cor-texto-suave);
+}
+
+.botao-copiar {
+  margin-left: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--cor-primaria);
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 .diagnostico {
@@ -184,8 +193,8 @@ table {
 th, td {
   padding: 10px 12px;
   text-align: left;
+  vertical-align: top;
   border-bottom: 1px solid var(--cor-borda);
-  white-space: nowrap;
 }
 
 thead th {
@@ -203,6 +212,7 @@ thead th {
   text-decoration: none;
   border-radius: 6px;
   font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .botao-download:hover {

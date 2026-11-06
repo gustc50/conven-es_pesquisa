@@ -1,4 +1,4 @@
 """Fontes de consulta de instrumentos coletivos (convenções, acordos etc.)."""
-from . import dieese, mediador
+from . import mediador
 
-FONTES = [mediador, dieese]
+FONTES = [mediador]
